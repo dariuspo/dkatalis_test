@@ -1,5 +1,4 @@
 import 'package:d_katalis/blocs/session/session_bloc.dart';
-import 'package:d_katalis/blocs/users/users_bloc.dart';
 import 'package:d_katalis/repositories/users_repository.dart';
 import 'package:d_katalis/screens/home_page.dart';
 import 'package:flutter/material.dart';
@@ -21,9 +20,6 @@ class App extends StatelessWidget {
       ],
       child: MultiBlocProvider(
         providers: [
-          BlocProvider<UsersBloc>(
-            create: (context) => UsersBloc(usersRepository),
-          ),
           BlocProvider<SessionBloc>(
             create: (context) => SessionBloc(usersRepository),
           ),

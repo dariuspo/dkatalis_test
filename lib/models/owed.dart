@@ -10,4 +10,9 @@ class Owed {
   final String name;
 
   Owed({required this.name, this.amount = 0});
+
+  @override
+  String toString() {
+    return "";
+  }
 }

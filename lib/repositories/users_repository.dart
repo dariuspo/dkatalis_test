@@ -10,7 +10,7 @@ class UsersRepository {
   }
 
   User? getUser(String name){
-    final User? user = box.get(name);
+    final User? user = box.get(name.toLowerCase());
     return user;
   }
 }
