@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:bloc/bloc.dart';
 import 'package:d_katalis/models/owed.dart';
 import 'package:d_katalis/models/user.dart';
@@ -31,6 +29,9 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     on<TransferBalance>((event, emit) {
       mapTransferBalance(emit, event);
     });
+    on<WithdrawBalance>((event, emit) {
+      mapWithdrawBalance(emit, event);
+    });
   }
 
   void mapTransferBalance(Emitter<SessionState> emit, TransferBalance event) {
@@ -49,23 +50,13 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     }
     Owed? userOwed = user.owns
         .firstWhereOrNull((element) => element.name == transferTo.name);
-    Owed? transferToOwed = transferTo.owns
-        .firstWhereOrNull((element) => element.name == user.name);
     double amountPaid = 0;
     if (userOwed != null) {
       double finalOwed = userOwed.amount - event.transferBalance;
       if (finalOwed == 0) {
-        user.owns.removeWhere((element) => element.name == transferTo.name);
-        transferTo.owns.removeWhere((element) => element.name == user.name);
+        clearOwnBetweenUsers(user, transferTo);
       } else {
-        userOwed.amount = finalOwed;
-        transferToOwed!.amount = -finalOwed;
-        transferTo.owns[transferTo.owns
-                .indexWhere((element) => element.name == user.name)] =
-            transferToOwed;
-        user.owns[user.owns
-                .indexWhere((element) => element.name == transferTo.name)] =
-            userOwed;
+        updateUsersOwed(user, transferTo, finalOwed);
       }
     } else if (user.balance < event.transferBalance) {
       double amountOwed = event.transferBalance - user.balance;
@@ -96,17 +87,45 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     if (!isValid) return;
     User user = usersRepository.getUser(state.userSaved!.name)!;
     double balanceAdded = event.addBalance;
+    List<String> toRemoveName = [];
+    String message = "";
     for (var element in user.owns) {
-      User transferToUser = usersRepository.getUser(element.name)!;
+      ///have own to this user
+      if (element.amount.isNegative && balanceAdded > 0) {
+        User transferToUser = usersRepository.getUser(element.name)!;
+        balanceAdded = element.amount + balanceAdded;
 
-      if(balanceAdded <= 0) break;
+        ///there is some balance left after pays own
+        ///this indicate that all owns is paid
+        if (balanceAdded >= 0) {
+          transferToUser.owns
+              .removeWhere((element) => element.name == user.name);
+          transferToUser.balance = transferToUser.balance + element.amount.abs();
+          usersRepository.addNewUser(transferToUser);
+          toRemoveName.add(transferToUser.name);
+          message = message +
+              "${message.isNotEmpty ? "\n" : ""}Transferred \$${element.amount.abs()} to ${transferToUser.name}";
+        } else {
+          transferToUser.balance = transferToUser.balance + (balanceAdded - element.amount).abs();
+          usersRepository.addNewUser(transferToUser);
+          message = message +
+              "${message.isNotEmpty ? "\n" : ""}Transferred \$${(balanceAdded - element.amount).abs()} to ${transferToUser.name}";
+          updateUsersOwed(user, transferToUser, balanceAdded);
+          break;
+        }
+      }
     }
-    user.balance = user.balance + event.addBalance;
+    user.owns.removeWhere((e) => toRemoveName.contains(e.name));
+    user.balance = user.balance + (balanceAdded < 0 ? 0 : balanceAdded);
     usersRepository.addNewUser(user);
+    if (balanceAdded > 0) {
+      message = message +
+          "${message.isNotEmpty ? "\n" : ""}\$$balanceAdded added to your account";
+    }
     emit(
       SessionLoggedIn(
         user: user,
-        message: "\$${event.addBalance} added to your account",
+        message: message,
       ),
     );
   }
@@ -138,5 +157,50 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       return false;
     }
     return true;
+  }
+
+  void mapWithdrawBalance(Emitter<SessionState> emit, WithdrawBalance event) {
+    bool isValid = checkIsLoggedIn(emit);
+    if (!isValid) return;
+    User user = usersRepository.getUser(state.userSaved!.name)!;
+    if (event.withdrawBalance > user.balance) {
+      emit(
+        SessionLoggedIn(
+          user: user,
+          message: "You cannot withdraw more than your balance",
+        ),
+      );
+      return;
+    }
+    user.balance = user.balance - event.withdrawBalance;
+    usersRepository.addNewUser(user);
+    emit(
+      SessionLoggedIn(
+        user: user,
+        message: "You withdrew ${event.withdrawBalance} from your account",
+      ),
+    );
+  }
+
+  clearOwnBetweenUsers(User user1, User user2) {
+    user1.owns.removeWhere((element) => element.name == user2.name);
+    user2.owns.removeWhere((element) => element.name == user1.name);
+    usersRepository.addNewUser(user1);
+    usersRepository.addNewUser(user2);
+  }
+
+  updateUsersOwed(User user1, User user2, double finalAmount) {
+    Owed? user1Owed =
+        user1.owns.firstWhereOrNull((element) => element.name == user2.name);
+    Owed? user2Owed =
+        user2.owns.firstWhereOrNull((element) => element.name == user1.name);
+    user1Owed!.amount = finalAmount;
+    user2Owed!.amount = -finalAmount;
+    user1.owns[user1.owns.indexWhere((element) => element.name == user2.name)] =
+        user1Owed;
+    user2.owns[user2.owns.indexWhere((element) => element.name == user1.name)] =
+        user2Owed;
+    usersRepository.addNewUser(user1);
+    usersRepository.addNewUser(user2);
   }
 }

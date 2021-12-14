@@ -12,6 +12,11 @@ class LogOut extends SessionEvent {
   LogOut();
 }
 
+class WithdrawBalance extends SessionEvent {
+  final double withdrawBalance;
+  WithdrawBalance(this.withdrawBalance);
+}
+
 class AddBalance extends SessionEvent {
   final double addBalance;
   AddBalance(this.addBalance);
