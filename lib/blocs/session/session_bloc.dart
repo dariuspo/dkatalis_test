@@ -22,7 +22,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       bool isValid = checkIsLoggedIn(emit);
       if (!isValid) return;
       emit(
-        SessionInitial(message: "Goodbye, ${state.userSaved!.name}"),
+        SessionInitial(message: "Goodbye, ${state.userSaved!.name}!"),
       );
     });
     ///handle add balance event
@@ -209,7 +209,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       usersRepository.addNewUser(user);
       emit(SessionLoggedIn(
         user: user,
-        message: "Hello, ${user.name}",
+        message: "Hello, ${user.name}!",
       ));
     }
   }

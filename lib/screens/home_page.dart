@@ -33,6 +33,8 @@ class _HomePageState extends State<HomePage> {
   ///get the position of current arrow up and down
   int historyPosition = 0;
 
+  final ScrollController scrollController = ScrollController();
+
   ///supported commands
   final List<String> availableCommands = [
     loginCommand,
@@ -52,7 +54,7 @@ class _HomePageState extends State<HomePage> {
   submitCommand(String command) {
     command = command.trim();
     print("command entered $command");
-    if(!commandHistories.contains(command)){
+    if (!commandHistories.contains(command)) {
       commandHistories.insert(1, command);
     }
     historyPosition = 0;
@@ -69,7 +71,7 @@ class _HomePageState extends State<HomePage> {
           return;
         }
         commandsString[1] = commandsString[1].trim();
-        if(commandsString[1].isEmpty){
+        if (commandsString[1].isEmpty) {
           addErrorCommand("Name have space");
           return;
         }
@@ -136,6 +138,7 @@ class _HomePageState extends State<HomePage> {
       );
     });
     textEditingController.clear();
+    scrollToEnd();
   }
 
   ///detect keyboard arrow up and down
@@ -169,6 +172,17 @@ class _HomePageState extends State<HomePage> {
   void didChangeDependencies() {
     // TODO: implement didChangeDependencies
     super.didChangeDependencies();
+  }
+
+  void scrollToEnd() {
+    if (scrollController.hasClients) {
+      print("dependencies changes has clients");
+
+      scrollController.animateTo(
+          scrollController.position.maxScrollExtent + 300,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInCubic);
+    }
   }
 
   @override
@@ -212,6 +226,7 @@ class _HomePageState extends State<HomePage> {
             });
           }
           textEditingController.clear();
+          scrollToEnd();
         },
         child: Scaffold(
           floatingActionButton: FloatingActionButton(
@@ -219,74 +234,73 @@ class _HomePageState extends State<HomePage> {
               Hive.deleteBoxFromDisk(userBoxName);
             },
           ),
-          body: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: SafeArea(
-              child: ListView(
-                children: [
-                  ...commandsPrinted.map((e) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 4.0),
-                              child: Text(
-                                "\$ ${e.command}",
-                                style: Theme.of(context).textTheme.bodyText2,
-                              ),
+          body: SafeArea(
+            child: ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.all(16.0),
+              children: [
+                ...commandsPrinted.map((e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4.0),
+                            child: Text(
+                              "\$ ${e.command}",
+                              style: Theme.of(context).textTheme.bodyText2,
                             ),
-                            Visibility(
-                              visible: e.message.isNotEmpty,
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 4.0),
-                                child: Text(e.message),
-                              ),
-                            ),
-                            Visibility(
-                              visible: e.balance.isNotEmpty,
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 4.0),
-                                child: Text(e.balance),
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: e.owed.map(
-                                (f) {
-                                  return Text(f);
-                                },
-                              ).toList(),
-                            ),
-                          ],
-                        ),
-                      )),
-                  RawKeyboardListener(
-                    focusNode: keyBoardFocus,
-                    onKey: onRawKeyEvent,
-                    child: TextField(
-                      focusNode: inputFocus,
-                      autofocus: true,
-                      controller: textEditingController,
-                      cursorWidth: 5,
-                      cursorHeight: 16,
-                      cursorColor: Theme.of(context).textTheme.subtitle2?.color,
-                      style: Theme.of(context).textTheme.bodyText2,
-                      expands: false,
-                      decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
-                          prefix: Text(
-                            "\$ ",
-                            style: Theme.of(context).textTheme.subtitle2,
                           ),
-                          border: InputBorder.none),
-                      onSubmitted: submitCommand,
-                      textInputAction: TextInputAction.send,
-                    ),
-                  )
-                ],
-              ),
+                          Visibility(
+                            visible: e.message.isNotEmpty,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 4.0),
+                              child: Text(e.message),
+                            ),
+                          ),
+                          Visibility(
+                            visible: e.balance.isNotEmpty,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 4.0),
+                              child: Text(e.balance),
+                            ),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: e.owed.map(
+                              (f) {
+                                return Text(f);
+                              },
+                            ).toList(),
+                          ),
+                        ],
+                      ),
+                    )),
+                RawKeyboardListener(
+                  focusNode: keyBoardFocus,
+                  onKey: onRawKeyEvent,
+                  child: TextField(
+                    focusNode: inputFocus,
+                    autofocus: true,
+                    controller: textEditingController,
+                    cursorWidth: 5,
+                    cursorHeight: 16,
+                    cursorColor: Theme.of(context).textTheme.subtitle2?.color,
+                    style: Theme.of(context).textTheme.bodyText2,
+                    expands: false,
+                    decoration: InputDecoration(
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                        prefix: Text(
+                          "\$ ",
+                          style: Theme.of(context).textTheme.subtitle2,
+                        ),
+                        border: InputBorder.none),
+                    onSubmitted: submitCommand,
+                    textInputAction: TextInputAction.send,
+                  ),
+                )
+              ],
             ),
           ),
         ),
