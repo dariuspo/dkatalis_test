@@ -1,10 +1,8 @@
 import 'package:d_katalis/blocs/session/session_bloc.dart';
-import 'package:d_katalis/main.dart';
 import 'package:d_katalis/models/command.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:universal_html/html.dart' as universal;
 
 const loginCommand = "login";
@@ -53,7 +51,6 @@ class _HomePageState extends State<HomePage> {
   ///text field submitted
   submitCommand(String command) {
     command = command.trim();
-    print("command entered $command");
     if (!commandHistories.contains(command)) {
       commandHistories.insert(1, command);
     }
@@ -142,8 +139,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   ///detect keyboard arrow up and down
-  onRawKeyEvent(RawKeyEvent event) {
-    if (event.runtimeType.toString() == 'RawKeyUpEvent') {
+  keyEvent(RawKeyEvent event) async {
+    if (event.runtimeType == RawKeyDownEvent) {
       if (event.data.logicalKey == LogicalKeyboardKey.arrowDown) {
         if (historyPosition <= 0) {
           setState(() {
@@ -153,6 +150,7 @@ class _HomePageState extends State<HomePage> {
         }
         historyPosition--;
         textEditingController.text = commandHistories[historyPosition];
+        await Future.delayed(const Duration(milliseconds: 100));
         textEditingController.selection = TextSelection.fromPosition(
             TextPosition(offset: textEditingController.text.length));
       }
@@ -162,6 +160,7 @@ class _HomePageState extends State<HomePage> {
         }
         historyPosition++;
         textEditingController.text = commandHistories[historyPosition];
+        await Future.delayed(const Duration(milliseconds: 100));
         textEditingController.selection = TextSelection.fromPosition(
             TextPosition(offset: textEditingController.text.length));
       }
@@ -176,8 +175,6 @@ class _HomePageState extends State<HomePage> {
 
   void scrollToEnd() {
     if (scrollController.hasClients) {
-      print("dependencies changes has clients");
-
       scrollController.animateTo(
           scrollController.position.maxScrollExtent + 300,
           duration: const Duration(milliseconds: 300),
@@ -229,11 +226,11 @@ class _HomePageState extends State<HomePage> {
           scrollToEnd();
         },
         child: Scaffold(
-          floatingActionButton: FloatingActionButton(
+          /*floatingActionButton: FloatingActionButton(
             onPressed: () {
               Hive.deleteBoxFromDisk(userBoxName);
             },
-          ),
+          ),*/
           body: SafeArea(
             child: ListView(
               controller: scrollController,
@@ -278,7 +275,7 @@ class _HomePageState extends State<HomePage> {
                     )),
                 RawKeyboardListener(
                   focusNode: keyBoardFocus,
-                  onKey: onRawKeyEvent,
+                  onKey: keyEvent,
                   child: TextField(
                     focusNode: inputFocus,
                     autofocus: true,
