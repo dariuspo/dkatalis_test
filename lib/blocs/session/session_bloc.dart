@@ -13,9 +13,11 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
   final UsersRepository usersRepository;
 
   SessionBloc(this.usersRepository) : super(const SessionInitial(message: "")) {
+    ///handle login event
     on<LogIn>((event, emit) {
       mapLoginEvent(emit, event);
     });
+    ///handle logout event
     on<LogOut>((event, emit) {
       bool isValid = checkIsLoggedIn(emit);
       if (!isValid) return;
@@ -23,22 +25,28 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
         SessionInitial(message: "Goodbye, ${state.userSaved!.name}"),
       );
     });
+    ///handle add balance event
     on<AddBalance>((event, emit) {
       mapAddBalance(emit, event);
     });
+    ///handle transfer balance event
     on<TransferBalance>((event, emit) {
       mapTransferBalance(emit, event);
     });
+    ///handle withdraw balance event
     on<WithdrawBalance>((event, emit) {
       mapWithdrawBalance(emit, event);
     });
   }
 
   void mapTransferBalance(Emitter<SessionState> emit, TransferBalance event) {
+    ///check user login or not
     bool isValid = checkIsLoggedIn(emit);
     if (!isValid) return;
     User user = usersRepository.getUser(state.userSaved!.name)!;
     User? transferTo = usersRepository.getUser(event.toName);
+
+    ///check the target user is already register or not
     if (transferTo == null) {
       emit(
         SessionLoggedIn(
@@ -48,24 +56,70 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       );
       return;
     }
+
+    ///cannot send to own name
+    if (transferTo.name.toLowerCase() == user.name.toLowerCase()) {
+      emit(
+        SessionLoggedIn(
+          user: user,
+          message: "Cannot transfer to yourself",
+        ),
+      );
+      return;
+    }
     Owed? userOwed = user.owns
         .firstWhereOrNull((element) => element.name == transferTo.name);
     double amountPaid = 0;
+
+    ///check if user have owe
     if (userOwed != null) {
       double finalOwed = userOwed.amount - event.transferBalance;
+
+      ///if the transfer is settled the owe, no balance transferred
       if (finalOwed == 0) {
         clearOwnBetweenUsers(user, transferTo);
       } else {
-        updateUsersOwed(user, transferTo, finalOwed);
+        ///transfer larger the owe, and have balance that could be transferred
+        if (finalOwed.isNegative && user.balance > 0) {
+          finalOwed = finalOwed + user.balance;
+
+          ///the balance is not enough
+          if (finalOwed.isNegative) {
+            transferTo.balance = transferTo.balance + user.balance;
+            amountPaid = user.balance;
+            user.balance = 0;
+            updateUsersOwed(user, transferTo, finalOwed);
+          }
+
+          ///balance is enough the owe is settled
+          ///remaining balance saved
+          else {
+            ///paid the user balance reduced by balance left
+            transferTo.balance = transferTo.balance + user.balance - finalOwed;
+            amountPaid = user.balance - finalOwed;
+            user.balance = finalOwed;
+            clearOwnBetweenUsers(user, transferTo);
+          }
+        } else {
+          ///the owe still larger than transferred or no balance available
+          ///in this case only calculate the owe
+          updateUsersOwed(user, transferTo, finalOwed);
+        }
       }
-    } else if (user.balance < event.transferBalance) {
+    }
+
+    ///user balance is not enough owe created
+    else if (user.balance < event.transferBalance) {
       double amountOwed = event.transferBalance - user.balance;
       amountPaid = user.balance;
       user.balance = 0;
       transferTo.owns.add(Owed(name: user.name, amount: amountOwed));
       user.owns.add(Owed(name: transferTo.name, amount: -amountOwed));
       transferTo.balance = transferTo.balance + amountPaid;
-    } else {
+    }
+
+    ///the user balance is enough money transferred
+    else {
       user.balance = user.balance - event.transferBalance;
       transferTo.balance = transferTo.balance + event.transferBalance;
       amountPaid = event.transferBalance;
@@ -83,14 +137,17 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
   }
 
   void mapAddBalance(Emitter<SessionState> emit, AddBalance event) {
+    ///check user login or not
     bool isValid = checkIsLoggedIn(emit);
     if (!isValid) return;
     User user = usersRepository.getUser(state.userSaved!.name)!;
     double balanceAdded = event.addBalance;
     List<String> toRemoveName = [];
     String message = "";
+
+    ///have owe that need to be paid first
     for (var element in user.owns) {
-      ///have own to this user
+      ///check if owe is negative, and deposited still larger than 0
       if (element.amount.isNegative && balanceAdded > 0) {
         User transferToUser = usersRepository.getUser(element.name)!;
         balanceAdded = element.amount + balanceAdded;
@@ -100,13 +157,19 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
         if (balanceAdded >= 0) {
           transferToUser.owns
               .removeWhere((element) => element.name == user.name);
-          transferToUser.balance = transferToUser.balance + element.amount.abs();
+          transferToUser.balance =
+              transferToUser.balance + element.amount.abs();
           usersRepository.addNewUser(transferToUser);
           toRemoveName.add(transferToUser.name);
           message = message +
               "${message.isNotEmpty ? "\n" : ""}Transferred \$${element.amount.abs()} to ${transferToUser.name}";
-        } else {
-          transferToUser.balance = transferToUser.balance + (balanceAdded - element.amount).abs();
+        }
+
+        ///no balance deposited left
+        ///cannot pay anymore break the loop
+        else {
+          transferToUser.balance =
+              transferToUser.balance + (balanceAdded - element.amount).abs();
           usersRepository.addNewUser(transferToUser);
           message = message +
               "${message.isNotEmpty ? "\n" : ""}Transferred \$${(balanceAdded - element.amount).abs()} to ${transferToUser.name}";
@@ -115,6 +178,8 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
         }
       }
     }
+
+    ///toRemove used to avoid error editing iterable while looping
     user.owns.removeWhere((e) => toRemoveName.contains(e.name));
     user.balance = user.balance + (balanceAdded < 0 ? 0 : balanceAdded);
     usersRepository.addNewUser(user);
@@ -131,6 +196,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
   }
 
   void mapLoginEvent(Emitter<SessionState> emit, LogIn event) {
+    ///already login, cannot login again
     if (state is SessionLoggedIn) {
       emit(SessionLoggedIn(
         user: state.userSaved!,
@@ -163,6 +229,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     bool isValid = checkIsLoggedIn(emit);
     if (!isValid) return;
     User user = usersRepository.getUser(state.userSaved!.name)!;
+    ///withdraw larger than current balance
     if (event.withdrawBalance > user.balance) {
       emit(
         SessionLoggedIn(

@@ -1,8 +1,10 @@
 import 'package:d_katalis/blocs/session/session_bloc.dart';
+import 'package:d_katalis/main.dart';
 import 'package:d_katalis/models/command.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:universal_html/html.dart' as universal;
 
 const loginCommand = "login";
@@ -19,10 +21,19 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  ///focus on text field
   final FocusNode inputFocus = FocusNode();
+
+  ///focus on keyboard detector
   final FocusNode keyBoardFocus = FocusNode();
+
+  ///command histories to support arrow up and down
   final List<String> commandHistories = [""];
+
+  ///get the position of current arrow up and down
   int historyPosition = 0;
+
+  ///supported commands
   final List<String> availableCommands = [
     loginCommand,
     depositCommand,
@@ -30,12 +41,20 @@ class _HomePageState extends State<HomePage> {
     transferCommand,
     withdrawCommand,
   ];
+
+  ///commands printed in screen
   final List<Command> commandsPrinted = [];
-  String currentCommand = "";
+
+  ///to handle text changes
   final textEditingController = TextEditingController();
 
+  ///text field submitted
   submitCommand(String command) {
-    commandHistories.insert(1, command);
+    command = command.trim();
+    print("command entered $command");
+    if(!commandHistories.contains(command)){
+      commandHistories.insert(1, command);
+    }
     historyPosition = 0;
     List<String> commandsString = command.split(" ");
     if (commandsString.isEmpty) {
@@ -47,6 +66,11 @@ class _HomePageState extends State<HomePage> {
       case loginCommand:
         if (commandsString.length < 2) {
           addErrorCommand("You need to specify the name");
+          return;
+        }
+        commandsString[1] = commandsString[1].trim();
+        if(commandsString[1].isEmpty){
+          addErrorCommand("Name have space");
           return;
         }
         context.read<SessionBloc>().add(LogIn(commandsString[1]));
@@ -100,6 +124,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  ///command input is not valid
   addErrorCommand(String message) {
     setState(() {
       commandsPrinted.add(
@@ -111,6 +136,33 @@ class _HomePageState extends State<HomePage> {
       );
     });
     textEditingController.clear();
+  }
+
+  ///detect keyboard arrow up and down
+  onRawKeyEvent(RawKeyEvent event) {
+    if (event.runtimeType.toString() == 'RawKeyUpEvent') {
+      if (event.data.logicalKey == LogicalKeyboardKey.arrowDown) {
+        if (historyPosition <= 0) {
+          setState(() {
+            textEditingController.clear();
+          });
+          return;
+        }
+        historyPosition--;
+        textEditingController.text = commandHistories[historyPosition];
+        textEditingController.selection = TextSelection.fromPosition(
+            TextPosition(offset: textEditingController.text.length));
+      }
+      if (event.data.logicalKey == LogicalKeyboardKey.arrowUp) {
+        if (historyPosition >= commandHistories.length - 1) {
+          return;
+        }
+        historyPosition++;
+        textEditingController.text = commandHistories[historyPosition];
+        textEditingController.selection = TextSelection.fromPosition(
+            TextPosition(offset: textEditingController.text.length));
+      }
+    }
   }
 
   @override
@@ -162,11 +214,11 @@ class _HomePageState extends State<HomePage> {
           textEditingController.clear();
         },
         child: Scaffold(
-          /*floatingActionButton: FloatingActionButton(
+          floatingActionButton: FloatingActionButton(
             onPressed: () {
               Hive.deleteBoxFromDisk(userBoxName);
             },
-          ),*/
+          ),
           body: Padding(
             padding: const EdgeInsets.all(16.0),
             child: SafeArea(
@@ -211,37 +263,7 @@ class _HomePageState extends State<HomePage> {
                       )),
                   RawKeyboardListener(
                     focusNode: keyBoardFocus,
-                    onKey: (RawKeyEvent event) {
-                      if (event.runtimeType.toString() == 'RawKeyUpEvent') {
-                        if (event.data.logicalKey ==
-                            LogicalKeyboardKey.arrowDown) {
-                          if (historyPosition <= 0) {
-                            setState(() {
-                              textEditingController.clear();
-                            });
-                            return;
-                          }
-                          historyPosition--;
-                          textEditingController.text =
-                              commandHistories[historyPosition];
-                          textEditingController.selection =
-                              TextSelection.fromPosition(TextPosition(
-                                  offset: textEditingController.text.length));
-                        }
-                        if (event.data.logicalKey ==
-                            LogicalKeyboardKey.arrowUp) {
-                          if (historyPosition >= commandHistories.length - 1) {
-                            return;
-                          }
-                          historyPosition++;
-                          textEditingController.text =
-                              commandHistories[historyPosition];
-                          textEditingController.selection =
-                              TextSelection.fromPosition(TextPosition(
-                                  offset: textEditingController.text.length));
-                        }
-                      }
-                    },
+                    onKey: onRawKeyEvent,
                     child: TextField(
                       focusNode: inputFocus,
                       autofocus: true,
@@ -259,9 +281,6 @@ class _HomePageState extends State<HomePage> {
                             style: Theme.of(context).textTheme.subtitle2,
                           ),
                           border: InputBorder.none),
-                      onChanged: (value) {
-                        currentCommand = value;
-                      },
                       onSubmitted: submitCommand,
                       textInputAction: TextInputAction.send,
                     ),
